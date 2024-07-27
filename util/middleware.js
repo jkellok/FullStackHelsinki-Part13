@@ -1,7 +1,9 @@
 const jwt = require('jsonwebtoken')
 const { SECRET } = require('../util/config')
+const Session = require('../models/session')
+const { User } = require('../models')
 
-const tokenExtractor = (req, res, next) => {
+const tokenExtractor = async (req, res, next) => {
   const authorization = req.get('authorization')
   if (authorization && authorization.toLowerCase().startsWith('bearer ')) {
     try {
@@ -10,6 +12,41 @@ const tokenExtractor = (req, res, next) => {
       return res.status(401).json({ error: 'token invalid' })
     }
   }  else {
+    return res.status(401).json({ error: 'token missing' })
+  }
+  next()
+}
+
+const sessionValidator = async (req, res, next) => {
+  const authorization = req.get('authorization')
+  if (authorization && authorization.toLowerCase().startsWith('bearer ')) {
+    try {
+      req.decodedToken = jwt.verify(authorization.substring(7), SECRET)
+      const userId = req.decodedToken.id
+      const user = await User.findOne({ where: { id: userId }})
+
+      const session = await Session.findOne({
+        where: {
+          userId: userId,
+          id: req.decodedToken.sessionId
+        }
+      })
+      console.log("session", session)
+      if (!(session)) {
+        return res.status(401).json({ error: 'no session found for token'})
+      }
+      if (user.disabled) {
+        session.isValid = false
+        await session.save()
+        return res.status(401).json({ error: 'account disabled, please contact admin' })
+      }
+      if (!(session.isValid)) {
+        return res.status(401).json({ error: 'session is not valid, login again' })
+      }
+    } catch {
+      return res.status(401).json({ error: 'error validating session' })
+    }
+  } else {
     return res.status(401).json({ error: 'token missing' })
   }
   next()
@@ -32,6 +69,7 @@ const errorHandler = (error, req, res, next) => {
 
 module.exports = {
   tokenExtractor,
+  sessionValidator,
   unknownEndpoint,
   errorHandler
 }
