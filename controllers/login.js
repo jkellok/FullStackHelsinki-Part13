@@ -28,8 +28,8 @@ router.post('/', async (request, response) => {
     })
   }
 
+  // delete previous sessions if they exist, so older tokens don't work
   const previousSession = await Session.findAll({ where: { userId: user.id }})
-  console.log("previous sessions", previousSession)
   if (previousSession) {
     Session.destroy({ where: { userId: user.id } })
   }
